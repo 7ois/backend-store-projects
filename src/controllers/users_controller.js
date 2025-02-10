@@ -4,13 +4,28 @@ const jwt = require("jsonwebtoken");
 const SECRET_KEY = "rmuti-key";
 
 const getAllUsers = async (req, res) => {
-  const { search } = req.query;
+  const { search, role_id } = req.query;
 
   try {
-    const result = await pool.query(
-      `SELECT * FROM users WHERE first_name ILIKE $1 OR last_name ILIKE $1`,
-      [`%${search || ""}%`],
-    );
+    let query = `SELECT * FROM users`;
+    const queryParams = [];
+
+    if (role_id) {
+      query += ` WHERE role_id = $1`;
+      queryParams.push(role_id);
+    }
+
+    if (search) {
+      query +=
+        queryParams.length > 0
+          ? ` AND (first_name ILIKE $${
+              queryParams.length + 1
+            } OR last_name ILIKE $${queryParams.length + 1})`
+          : ` WHERE (first_name ILIKE $1 OR last_name ILIKE $1)`;
+      queryParams.push(`%${search}%`);
+    }
+
+    const result = await pool.query(query, queryParams);
 
     if (result.rows.length === 0) {
       res.status(404).json({
