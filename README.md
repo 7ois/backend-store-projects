@@ -21,6 +21,7 @@ Projects Library API เป็นระบบที่ช่วยจัดก�
 ```sh
 git clone <your-repo-url>
 cd projects-library-api
+mkdir uploads
 ```
 
 ### 2️⃣ **ติดตั้ง Dependencies**
