@@ -1,7 +1,9 @@
+require("dotenv").config();
+
 const pool = require("../config/db_config");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const SECRET_KEY = "rmuti-key";
+const SECRET_KEY = process.env.SECRET_KEY;
 
 const getAllUsers = async (req, res) => {
   const { search, role_id } = req.query;
@@ -101,7 +103,6 @@ const register = async (req, res) => {
       .status(200)
       .json({ message: "User added successfully", user: result.rows[0] });
   } catch (err) {
-    console.error("Error adding user:", err);
     res.status(500).json({
       error: "Internal server error",
       message: "Please try again later",
@@ -136,6 +137,7 @@ const login = async (req, res) => {
     // สร้าง JWT Token
     const token = jwt.sign(
       {
+        user_id: user.user_id,
         role_id: user.role_id,
         email: user.email,
         first_name: user.first_name,
@@ -150,7 +152,6 @@ const login = async (req, res) => {
       token,
     });
   } catch (err) {
-    console.error("Login error:", err);
     res.status(500).json({
       error: "Internal server error",
       message: "Please try again later",
