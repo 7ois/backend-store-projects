@@ -4,18 +4,51 @@ const jwt = require("jsonwebtoken");
 const SECRET_KEY = "rmuti-key";
 
 const getAllUsers = async (req, res) => {
-  const { search } = req.query;
+  const { search, role_id } = req.query;
 
   try {
-    const result = await pool.query(
-      `SELECT * FROM users WHERE first_name ILIKE $1 OR last_name ILIKE $1`,
-      [`%${search || ""}%`],
-    );
+    let query = `SELECT * FROM users`;
+    const queryParams = [];
+    const conditions = [];
+
+    if (role_id) {
+      conditions.push(`role_id = $${queryParams.length + 1}`);
+      queryParams.push(role_id);
+    }
+
+    if (search) {
+      const searchTerms = search
+        .trim()
+        .split(" ")
+        .map((term) => `%${term}%`);
+
+      if (searchTerms.length === 1) {
+        conditions.push(
+          `(first_name ILIKE $${queryParams.length + 1} OR last_name ILIKE $${
+            queryParams.length + 2
+          })`,
+        );
+        queryParams.push(searchTerms[0], searchTerms[0]);
+      } else if (searchTerms.length === 2) {
+        conditions.push(
+          `first_name ILIKE $${queryParams.length + 1} AND last_name ILIKE $${
+            queryParams.length + 2
+          }`,
+        );
+        queryParams.push(searchTerms[0], searchTerms[1]);
+      }
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ` + conditions.join(" AND ");
+    }
+
+    const result = await pool.query(query, queryParams);
 
     if (result.rows.length === 0) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
-        data: "No users found",
+        data: [],
       });
     }
 
