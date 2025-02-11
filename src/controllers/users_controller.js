@@ -9,28 +9,46 @@ const getAllUsers = async (req, res) => {
   try {
     let query = `SELECT * FROM users`;
     const queryParams = [];
+    const conditions = [];
 
     if (role_id) {
-      query += ` WHERE role_id = $1`;
+      conditions.push(`role_id = $${queryParams.length + 1}`);
       queryParams.push(role_id);
     }
 
     if (search) {
-      query +=
-        queryParams.length > 0
-          ? ` AND (first_name ILIKE $${
-              queryParams.length + 1
-            } OR last_name ILIKE $${queryParams.length + 1})`
-          : ` WHERE (first_name ILIKE $1 OR last_name ILIKE $1)`;
-      queryParams.push(`%${search}%`);
+      const searchTerms = search
+        .trim()
+        .split(" ")
+        .map((term) => `%${term}%`);
+
+      if (searchTerms.length === 1) {
+        conditions.push(
+          `(first_name ILIKE $${queryParams.length + 1} OR last_name ILIKE $${
+            queryParams.length + 2
+          })`,
+        );
+        queryParams.push(searchTerms[0], searchTerms[0]);
+      } else if (searchTerms.length === 2) {
+        conditions.push(
+          `first_name ILIKE $${queryParams.length + 1} AND last_name ILIKE $${
+            queryParams.length + 2
+          }`,
+        );
+        queryParams.push(searchTerms[0], searchTerms[1]);
+      }
+    }
+
+    if (conditions.length > 0) {
+      query += ` WHERE ` + conditions.join(" AND ");
     }
 
     const result = await pool.query(query, queryParams);
 
     if (result.rows.length === 0) {
-      res.status(404).json({
+      return res.status(404).json({
         success: false,
-        data: "No users found",
+        data: [],
       });
     }
 
