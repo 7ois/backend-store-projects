@@ -1,13 +1,13 @@
+require("dotenv").config();
+
 const pool = require("../config/db_config");
 const jwt = require("jsonwebtoken");
+
+const SECRET_KEY = process.env.SECRET_KEY;
 
 const postProject = async (req, res) => {
   const { type_id, project_name, description, keywords, date, role_group } =
     req.body;
-
-  // ตรวจสอบข้อมูลที่รับเข้ามา
-  console.log("Received request body:", req.body);
-  console.log("Received role_group:", role_group);
 
   // ตรวจสอบว่ามีไฟล์ที่อัพโหลดมาหรือไม่
   if (!req.file) {
@@ -39,7 +39,6 @@ const postProject = async (req, res) => {
   }
 
   for (const user of parsedRoleGroup) {
-    console.log("Checking user:", user);
     if (!user.user_id || !user.role_group) {
       return res.status(400).json({
         error: "Each user in role_group must have user_id and role_group",
@@ -177,11 +176,9 @@ const getMyProjects = async (req, res) => {
 
   try {
     // ตรวจสอบและ decode token
-    const decoded = jwt.verify(token, "SECRET_KEY");
+    const decoded = jwt.verify(token, SECRET_KEY);
     const user_id = decoded.user_id; // ดึง user_id จาก token
-    console.log(user_id);
 
-    // คำสั่ง SQL ที่ใช้ JOIN ระหว่าง table user_project_mapping และ projects
     const result = await pool.query(
       `
             SELECT p.* 
@@ -190,7 +187,7 @@ const getMyProjects = async (req, res) => {
             WHERE upm.user_id = $1
         `,
       [user_id],
-    ); // ใช้ user_id ที่ดึงจาก token
+    );
 
     // ส่งข้อมูลโปรเจกต์ทั้งหมดที่เกี่ยวข้องกับ user_id
     res.status(200).json({
