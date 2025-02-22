@@ -17,6 +17,17 @@ const postTypeProjects = async (req, res) => {
   const { user_id, type_name } = req.body;
 
   try {
+    const checkUserQuery =
+      "SELECT EXISTS(SELECT 1 FROM users WHERE user_id = $1)";
+    const userCheck = await pool.query(checkUserQuery, [user_id]);
+
+    if (!userCheck.rows[0].exists) {
+      return res.status(400).json({
+        error: "Invalid user",
+        message: "User does not exist",
+      });
+    }
+
     const checkTypeNameQuery =
       "SELECT * FROM type_projects WHERE type_name = $1";
     const typeNameCheck = await pool.query(checkTypeNameQuery, [type_name]);

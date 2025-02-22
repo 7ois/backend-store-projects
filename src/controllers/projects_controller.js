@@ -6,10 +6,17 @@ const jwt = require("jsonwebtoken");
 const SECRET_KEY = process.env.SECRET_KEY;
 
 const postProject = async (req, res) => {
-  const { type_id, project_name, description, keywords, date, role_group } =
-    req.body;
+  const {
+    type_id,
+    project_name_th,
+    project_name_en,
+    abstract_th,
+    abstract_en,
+    keywords,
+    date,
+    role_group,
+  } = req.body;
 
-  // ตรวจสอบว่ามีไฟล์ที่อัพโหลดมาหรือไม่
   if (!req.file) {
     return res.status(400).json({
       error: "No file uploaded",
@@ -19,7 +26,7 @@ const postProject = async (req, res) => {
   let parsedRoleGroup = role_group;
   if (typeof role_group === "string") {
     try {
-      parsedRoleGroup = JSON.parse(role_group); // แปลงจาก string เป็น array
+      parsedRoleGroup = JSON.parse(role_group);
     } catch (error) {
       return res.status(400).json({
         error: "role_group is not a valid JSON string",
@@ -27,7 +34,6 @@ const postProject = async (req, res) => {
     }
   }
 
-  // ตรวจสอบว่า role_group มีข้อมูลหรือไม่
   if (
     !parsedRoleGroup ||
     !Array.isArray(parsedRoleGroup) ||
@@ -49,25 +55,29 @@ const postProject = async (req, res) => {
   try {
     const filePath = `/uploads/${req.file.filename}`;
     const fileName = req.file.originalname;
+
+    const formattedDate = date ? new Date(date) : null;
+
     const values = [
       type_id,
-      project_name,
-      description || null,
+      project_name_th,
+      project_name_en,
+      abstract_th || null,
+      abstract_en || null,
       keywords || null,
-      date,
+      formattedDate,
       fileName,
       filePath,
     ];
 
-    // เพิ่มโปรเจกต์ใหม่ลงในตาราง projects และรับ project_id
     const result = await pool.query(
-      `INSERT INTO projects (type_id, project_name, description, keywords, date, file_name, file_path) 
-            VALUES ($1, $2, $3, $4, $5, $6, $7) RETURNING project_id`,
+      `INSERT INTO projects (type_id, project_name_th, project_name_en, abstract_th, abstract_en, keywords, date, file_name, file_path) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING project_id`,
       values,
     );
+
     const projectId = result.rows[0].project_id;
 
-    // ใช้ Promise.all สำหรับการเพิ่มข้อมูลใน userprojectmapping
     const userMappingPromises = parsedRoleGroup.map((user) =>
       pool.query(
         `INSERT INTO user_project_mapping (user_id, project_id, role_group) VALUES ($1, $2, $3) RETURNING *`,
@@ -75,10 +85,8 @@ const postProject = async (req, res) => {
       ),
     );
 
-    // รอให้ทุกคำสั่งเสร็จสมบูรณ์
     await Promise.all(userMappingPromises);
 
-    // ส่งข้อมูลกลับไปที่ client
     res.status(200).json({
       message: "Project added successfully",
       project_id: projectId,
@@ -93,8 +101,33 @@ const postProject = async (req, res) => {
 };
 
 const getAllProjects = async (req, res) => {
+  const { type_id, search } = req.query;
+
   try {
-    const result = await pool.query("SELECT * FROM projects");
+    let query = "SELECT * FROM projects";
+    let values = [];
+
+    query += " WHERE deleted_at IS NULL";
+    if (type_id || search) {
+      query += " WHERE";
+      const conditions = [];
+
+      if (type_id) {
+        conditions.push("type_id = $1");
+        values.push(type_id);
+      }
+
+      if (search) {
+        conditions.push(
+          "(project_name_th ILIKE $2 OR project_name_en ILIKE $2 OR keywords::text ILIKE $2)",
+        );
+        values.push(`%${search}%`);
+      }
+
+      query += " " + conditions.join(" AND ");
+    }
+
+    const result = await pool.query(query, values);
     res.status(200).json({
       success: true,
       data: result.rows,
@@ -164,8 +197,7 @@ const getProject = async (req, res) => {
 };
 
 const getMyProjects = async (req, res) => {
-  // ดึง token จาก Authorization header
-  const token = req.headers.authorization?.split(" ")[1]; // คาดว่าเป็นรูปแบบ Bearer <token>
+  const token = req.headers.authorization?.split(" ")[1]; // Bearer <token>
 
   if (!token) {
     return res.status(401).json({
@@ -175,27 +207,35 @@ const getMyProjects = async (req, res) => {
   }
 
   try {
-    // ตรวจสอบและ decode token
     const decoded = jwt.verify(token, SECRET_KEY);
-    const user_id = decoded.user_id; // ดึง user_id จาก token
+    const user_id = decoded.user_id;
+    const { search } = req.query;
 
-    const result = await pool.query(
-      `
-            SELECT p.* 
-            FROM projects p
-            JOIN user_project_mapping upm ON p.project_id = upm.project_id
-            WHERE upm.user_id = $1
-        `,
-      [user_id],
-    );
+    let query = `
+      SELECT p.* 
+      FROM projects p
+      JOIN user_project_mapping upm ON p.project_id = upm.project_id
+      WHERE upm.user_id = $1 AND p.deleted_at IS NULL
+    `;
 
-    // ส่งข้อมูลโปรเจกต์ทั้งหมดที่เกี่ยวข้องกับ user_id
+    let values = [user_id];
+
+    if (search) {
+      query += `
+        AND (p.project_name_th ILIKE $2 
+        OR p.project_name_en ILIKE $2 
+        OR p.keywords::text ILIKE $2)
+      `;
+      values.push(`%${search}%`);
+    }
+
+    const result = await pool.query(query, values);
+
     res.status(200).json({
       success: true,
       data: result.rows,
     });
   } catch (err) {
-    // ถ้ามีข้อผิดพลาดในการดึงข้อมูลหรือในการตรวจสอบ token
     res.status(500).json({
       success: false,
       error: err.message,
@@ -204,4 +244,149 @@ const getMyProjects = async (req, res) => {
   }
 };
 
-module.exports = { postProject, getAllProjects, getProject, getMyProjects };
+const updateProject = async (req, res) => {
+  const { project_id } = req.params;
+  const {
+    type_id,
+    project_name_th,
+    project_name_en,
+    abstract_th,
+    abstract_en,
+    keywords,
+    date,
+    role_group,
+  } = req.body;
+
+  try {
+    const checkProject = await pool.query(
+      "SELECT * FROM projects WHERE project_id = $1",
+      [project_id],
+    );
+
+    if (checkProject.rowCount === 0) {
+      return res.status(404).json({ error: "Project not found" });
+    }
+
+    let parsedRoleGroup = role_group;
+    if (typeof role_group === "string") {
+      try {
+        parsedRoleGroup = JSON.parse(role_group);
+      } catch (error) {
+        return res.status(400).json({
+          error: "role_group is not a valid JSON string",
+        });
+      }
+    }
+
+    if (!parsedRoleGroup || !Array.isArray(parsedRoleGroup)) {
+      return res.status(400).json({
+        error: "Invalid role_group format",
+      });
+    }
+
+    for (const user of parsedRoleGroup) {
+      if (!user.user_id || !user.role_group) {
+        return res.status(400).json({
+          error: "Each user in role_group must have user_id and role_group",
+        });
+      }
+    }
+
+    let filePath = checkProject.rows[0].file_path;
+    let fileName = checkProject.rows[0].file_name;
+
+    if (req.file) {
+      filePath = `/uploads/${req.file.filename}`;
+      fileName = req.file.originalname;
+    }
+
+    const values = [
+      type_id,
+      project_name_th,
+      project_name_en,
+      abstract_th || null,
+      abstract_en || null,
+      keywords || null,
+      date,
+      fileName,
+      filePath,
+      project_id,
+    ];
+
+    await pool.query(
+      `UPDATE projects 
+       SET type_id = $1, 
+           project_name_th = $2,
+           project_name_en = $3,
+           abstract_th = $4,
+           abstract_en = $5,
+           keywords = $6,
+           date = $7,
+           file_name = $8,
+           file_path = $9,
+           updated_at = NOW()
+       WHERE project_id = $10`,
+      values,
+    );
+
+    await pool.query("DELETE FROM user_project_mapping WHERE project_id = $1", [
+      project_id,
+    ]);
+
+    const userMappingPromises = parsedRoleGroup.map((user) =>
+      pool.query(
+        `INSERT INTO user_project_mapping (user_id, project_id, role_group) VALUES ($1, $2, $3) RETURNING *`,
+        [user.user_id, project_id, user.role_group],
+      ),
+    );
+
+    await Promise.all(userMappingPromises);
+
+    res.status(200).json({
+      message: "Project updated successfully",
+      project_id,
+    });
+  } catch (err) {
+    console.error("Error updating project:", err);
+    res.status(500).json({
+      error: "Internal server error",
+      message: "Please try again later",
+    });
+  }
+};
+
+const deleteProject = async (req, res) => {
+  const { project_id } = req.params;
+
+  try {
+    const result = await pool.query(
+      `UPDATE projects SET deleted_at = NOW() WHERE project_id = $1 RETURNING *`,
+      [project_id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: "Project not found",
+      });
+    }
+
+    res.status(200).json({
+      message: "Project deleted successfully",
+    });
+  } catch (err) {
+    console.error("Error deleting project:", err);
+    res.status(500).json({
+      error: "Internal server error",
+      message: "Please try again later",
+    });
+  }
+};
+
+module.exports = {
+  postProject,
+  getAllProjects,
+  getProject,
+  getMyProjects,
+  updateProject,
+  deleteProject,
+};
