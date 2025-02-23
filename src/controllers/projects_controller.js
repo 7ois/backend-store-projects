@@ -221,7 +221,7 @@ const getMyProjects = async (req, res) => {
   try {
     const decoded = jwt.verify(token, SECRET_KEY);
     const user_id = decoded.user_id;
-    const { search } = req.query;
+    const { search, year } = req.query;
 
     let query = `
       SELECT 
@@ -242,9 +242,20 @@ const getMyProjects = async (req, res) => {
       query += `
         AND (p.project_name_th ILIKE $2 
         OR p.project_name_en ILIKE $2 
-        OR p.keywords::text ILIKE $2)
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(p.keywords) AS keyword 
+          WHERE keyword ILIKE $2
+        ))
       `;
       values.push(`%${search}%`);
+    }
+
+    if (year) {
+      const christianYear = parseInt(year, 10) - 543; // Convert Buddhist Year to Christian Year
+      query += `
+        AND EXTRACT(YEAR FROM p.date) = $${values.length + 1}
+      `;
+      values.push(christianYear);
     }
 
     const result = await pool.query(query, values);
