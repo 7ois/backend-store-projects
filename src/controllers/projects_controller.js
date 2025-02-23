@@ -212,9 +212,15 @@ const getMyProjects = async (req, res) => {
     const { search } = req.query;
 
     let query = `
-      SELECT p.* 
+      SELECT 
+        p.*, 
+        CASE 
+          WHEN tp.deleted_at IS NOT NULL THEN NULL
+          ELSE p.type_id 
+        END AS type_id
       FROM projects p
-      JOIN user_project_mapping upm ON p.project_id = upm.project_id
+      LEFT JOIN user_project_mapping upm ON p.project_id = upm.project_id
+      LEFT JOIN type_projects tp ON p.type_id = tp.type_id
       WHERE upm.user_id = $1 AND p.deleted_at IS NULL
     `;
 
