@@ -101,32 +101,44 @@ const postProject = async (req, res) => {
 };
 
 const getAllProjects = async (req, res) => {
-  const { type_id, search } = req.query;
+  const { type_id, search, year } = req.query;
 
   try {
     let query = "SELECT * FROM projects";
     let values = [];
+    let conditions = [];
+    let paramIndex = 1;
 
     query += " WHERE deleted_at IS NULL";
-    if (type_id || search) {
-      query += " WHERE";
-      const conditions = [];
 
-      if (type_id) {
-        conditions.push("type_id = $1");
-        values.push(type_id);
-      }
-
-      if (search) {
-        conditions.push(
-          "(project_name_th ILIKE $2 OR project_name_en ILIKE $2 OR keywords::text ILIKE $2)",
-        );
-        values.push(`%${search}%`);
-      }
-
-      query += " " + conditions.join(" AND ");
+    if (type_id) {
+      conditions.push(`type_id = $${paramIndex}`);
+      values.push(parseInt(type_id, 10));
+      paramIndex++;
     }
 
+    if (search) {
+      conditions.push(
+        `(project_name_th ILIKE $${paramIndex} OR project_name_en ILIKE $${paramIndex} OR EXISTS (` +
+          `SELECT 1 FROM jsonb_array_elements_text(keywords) AS keyword ` +
+          `WHERE keyword ILIKE $${paramIndex}))`,
+      );
+      values.push(`%${search}%`);
+      paramIndex++;
+    }
+
+    if (year) {
+      const christianYear = parseInt(year, 10) - 543;
+      conditions.push(`EXTRACT(YEAR FROM date) = $${paramIndex}`);
+      values.push(christianYear);
+      paramIndex++;
+    }
+
+    if (conditions.length > 0) {
+      query += " AND " + conditions.join(" AND ");
+    }
+
+    // รัน query
     const result = await pool.query(query, values);
     res.status(200).json({
       success: true,
