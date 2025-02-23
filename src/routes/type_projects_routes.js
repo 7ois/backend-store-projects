@@ -8,5 +8,9 @@ router.put(
   "/updateTypeProjects/:id",
   typeProjectsController.updateTypeProjects,
 );
+router.delete(
+  "/deleteTypeProject/:id",
+  typeProjectsController.deleteTypeProject,
+);
 
 module.exports = router;

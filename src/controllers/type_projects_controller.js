@@ -2,7 +2,9 @@ const pool = require("../config/db_config");
 
 const getAllTypeProjects = async (req, res) => {
   try {
-    const result = await pool.query("SELECT * FROM type_projects");
+    const result = await pool.query(
+      "SELECT * FROM type_projects WHERE deleted_at IS NULL",
+    );
     res.status(200).json(result.rows);
   } catch (err) {
     res.status(500).json({
@@ -90,4 +92,39 @@ const updateTypeProjects = async (req, res) => {
   }
 };
 
-module.exports = { getAllTypeProjects, postTypeProjects, updateTypeProjects };
+const deleteTypeProject = async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Check if the type project exists
+    const result = await pool.query(
+      "UPDATE type_projects SET deleted_at = $1 WHERE type_id = $2 AND deleted_at IS NULL RETURNING type_id, type_name, deleted_at",
+      [new Date(), id],
+    );
+
+    if (result.rowCount === 0) {
+      return res.status(404).json({
+        error: "Type project not found or already deleted",
+        message: `No active type project found with id ${id}`,
+      });
+    }
+
+    res.status(200).json({
+      message: "Type project soft-deleted successfully",
+      deleted_type_project: result.rows[0],
+    });
+  } catch (err) {
+    console.error("Error soft-deleting type_project:", err);
+    res.status(500).json({
+      error: "Internal server error",
+      message: "Could not delete type project",
+    });
+  }
+};
+
+module.exports = {
+  getAllTypeProjects,
+  postTypeProjects,
+  updateTypeProjects,
+  deleteTypeProject,
+};
