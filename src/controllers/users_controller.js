@@ -159,4 +159,64 @@ const login = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, register, login };
+const updateUser = async (req, res) => {
+  const { user_id } = req.params;
+  const { first_name, last_name } = req.body;
+
+  try {
+    const userQuery = "SELECT * FROM users WHERE user_id = $1";
+    const userResult = await pool.query(userQuery, [user_id]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    if (first_name === undefined && last_name === undefined) {
+      return res.status(400).json({
+        success: false,
+        message: "No fields provided for update",
+      });
+    }
+
+    const updateFields = [];
+    const queryParams = [];
+
+    if (first_name !== undefined) {
+      queryParams.push(first_name);
+      updateFields.push(`first_name = $${queryParams.length}`);
+    }
+
+    if (last_name !== undefined) {
+      queryParams.push(last_name);
+      updateFields.push(`last_name = $${queryParams.length}`);
+    }
+
+    queryParams.push(new Date());
+    updateFields.push(`updated_at = $${queryParams.length}`);
+
+    const updateQuery = `UPDATE users SET ${updateFields.join(
+      ", ",
+    )} WHERE user_id = $${queryParams.length + 1} RETURNING *`;
+    queryParams.push(user_id);
+
+    const updatedUser = await pool.query(updateQuery, queryParams);
+
+    return res.status(200).json({
+      success: true,
+      message: "User updated successfully",
+      user: updatedUser.rows[0],
+    });
+  } catch (err) {
+    console.error("Error updating user:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  }
+};
+
+module.exports = { getAllUsers, register, login, updateUser };
