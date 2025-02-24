@@ -183,8 +183,10 @@ const getProject = async (req, res) => {
     const project = {
       project_id: projectData.project_id,
       type_id: projectData.type_id,
-      project_name: projectData.project_name,
-      description: projectData.description,
+      project_name_th: projectData.project_name_th,
+      project_name_en: projectData.project_name_en,
+      abstract_th: projectData.abstract_th,
+      abstract_en: projectData.abstract_en,
       keywords: projectData.keywords,
       date: projectData.date,
       file_name: projectData.file_name,
