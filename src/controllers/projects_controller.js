@@ -180,6 +180,18 @@ const getProject = async (req, res) => {
       role_group: row.role_group,
     }));
 
+    let keywords = [];
+    if (projectData.keywords) {
+      try {
+        keywords =
+          typeof projectData.keywords === "string"
+            ? JSON.parse(projectData.keywords)
+            : projectData.keywords;
+      } catch (err) {
+        console.error("Error parsing keywords:", err);
+      }
+    }
+
     const project = {
       project_id: projectData.project_id,
       type_id: projectData.type_id,
@@ -187,7 +199,7 @@ const getProject = async (req, res) => {
       project_name_en: projectData.project_name_en,
       abstract_th: projectData.abstract_th,
       abstract_en: projectData.abstract_en,
-      keywords: projectData.keywords,
+      keywords: keywords || [],
       date: projectData.date,
       file_name: projectData.file_name,
       file_path: projectData.file_path,
