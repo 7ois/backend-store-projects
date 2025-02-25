@@ -3,8 +3,15 @@ const pool = require("../config/db_config");
 const getAllTypeProjects = async (req, res) => {
   try {
     const result = await pool.query(
-      "SELECT * FROM type_projects WHERE deleted_at IS NULL",
+      `SELECT 
+          tp.*,
+          COUNT(p.project_id) AS project_count
+      FROM type_projects tp
+      LEFT JOIN projects p ON tp.type_id = p.type_id AND p.deleted_at IS NULL
+      WHERE tp.deleted_at IS NULL
+      GROUP BY tp.type_id`,
     );
+
     res.status(200).json(result.rows);
   } catch (err) {
     res.status(500).json({
@@ -31,7 +38,7 @@ const postTypeProjects = async (req, res) => {
     }
 
     const checkTypeNameQuery =
-      "SELECT * FROM type_projects WHERE type_name = $1";
+      "SELECT * FROM type_projects WHERE type_name = $1 AND deleted_at IS NULL";
     const typeNameCheck = await pool.query(checkTypeNameQuery, [type_name]);
 
     if (typeNameCheck.rows.length > 0) {
