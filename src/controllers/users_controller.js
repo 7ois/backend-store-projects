@@ -76,18 +76,10 @@ const getAllUsers = async (req, res) => {
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2)); // Slice to remove LIMIT/OFFSET params for total count
     const totalCount = parseInt(countResult.rows[0].count);
 
-    if (result.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        data: [],
-        totalCount,
-      });
-    }
-
     res.status(200).json({
       success: true,
       data: result.rows,
-      totalCount, // Include total count for pagination
+      totalCount,
     });
   } catch (err) {
     res.status(500).json({
