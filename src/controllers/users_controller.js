@@ -9,12 +9,16 @@ const getAllUsers = async (req, res) => {
   const { search, role_id } = req.query;
 
   try {
-    let query = `SELECT * FROM users`;
+    let query = `
+      SELECT users.*, roles.role_name 
+      FROM users 
+      LEFT JOIN roles ON users.role_id = roles.role_id
+    `;
     const queryParams = [];
     const conditions = [];
 
     if (role_id) {
-      conditions.push(`role_id = $${queryParams.length + 1}`);
+      conditions.push(`users.role_id = $${queryParams.length + 1}`);
       queryParams.push(role_id);
     }
 
@@ -26,23 +30,26 @@ const getAllUsers = async (req, res) => {
 
       if (searchTerms.length === 1) {
         conditions.push(
-          `(first_name ILIKE $${queryParams.length + 1} OR last_name ILIKE $${
-            queryParams.length + 2
-          })`,
+          `(users.first_name ILIKE $${
+            queryParams.length + 1
+          } OR users.last_name ILIKE $${queryParams.length + 2})`,
         );
         queryParams.push(searchTerms[0], searchTerms[0]);
       } else if (searchTerms.length === 2) {
         conditions.push(
-          `first_name ILIKE $${queryParams.length + 1} AND last_name ILIKE $${
-            queryParams.length + 2
-          }`,
+          `users.first_name ILIKE $${
+            queryParams.length + 1
+          } AND users.last_name ILIKE $${queryParams.length + 2}`,
         );
         queryParams.push(searchTerms[0], searchTerms[1]);
       }
     }
 
     if (conditions.length > 0) {
+      conditions.push(`users.deleted_at IS NULL`);
       query += ` WHERE ` + conditions.join(" AND ");
+    } else {
+      query += ` WHERE users.deleted_at IS NULL`;
     }
 
     const result = await pool.query(query, queryParams);
@@ -219,4 +226,36 @@ const updateUser = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, register, login, updateUser };
+const deleteUser = async (req, res) => {
+  const { user_id } = req.params;
+
+  try {
+    const userQuery = "SELECT * FROM users WHERE user_id = $1";
+    const userResult = await pool.query(userQuery, [user_id]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const deleteQuery = `UPDATE users SET deleted_at = $1 WHERE user_id = $2 RETURNING *`;
+    const deletedUser = await pool.query(deleteQuery, [new Date(), user_id]);
+
+    return res.status(200).json({
+      success: true,
+      message: "User soft deleted successfully",
+      user: deletedUser.rows[0],
+    });
+  } catch (err) {
+    console.error("Error soft deleting user:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  }
+};
+
+module.exports = { getAllUsers, register, login, updateUser, deleteUser };

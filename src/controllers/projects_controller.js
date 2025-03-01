@@ -101,15 +101,19 @@ const postProject = async (req, res) => {
 };
 
 const getAllProjects = async (req, res) => {
-  const { type_id, search, year } = req.query;
+  const { type_id, search, year, limit = 10, offset = 0 } = req.query;
 
   try {
     let query = "SELECT * FROM projects";
+    let countQuery = "SELECT COUNT(*) FROM projects";
     let values = [];
     let conditions = [];
     let paramIndex = 1;
 
-    query += " WHERE deleted_at IS NULL";
+    const baseCondition = " WHERE deleted_at IS NULL";
+
+    query += baseCondition;
+    countQuery += baseCondition;
 
     if (type_id) {
       conditions.push(`type_id = $${paramIndex}`);
@@ -136,13 +140,31 @@ const getAllProjects = async (req, res) => {
 
     if (conditions.length > 0) {
       query += " AND " + conditions.join(" AND ");
+      countQuery += " AND " + conditions.join(" AND ");
     }
 
-    // รัน query
-    const result = await pool.query(query, values);
+    query += ` LIMIT $${paramIndex}`;
+    values.push(parseInt(limit, 10));
+    paramIndex++;
+
+    query += ` OFFSET $${paramIndex}`;
+    values.push(parseInt(offset, 10));
+    paramIndex++;
+
+    const dataPromise = pool.query(query, values);
+    const countPromise = pool.query(countQuery, values.slice(0, -2));
+
+    const [dataResult, countResult] = await Promise.all([
+      dataPromise,
+      countPromise,
+    ]);
+
+    const totalCount = countResult.rows[0].count;
+
     res.status(200).json({
       success: true,
-      data: result.rows,
+      data: dataResult.rows,
+      totalCount: totalCount,
     });
   } catch (err) {
     res.status(500).json({
@@ -235,7 +257,7 @@ const getMyProjects = async (req, res) => {
   try {
     const decoded = jwt.verify(token, SECRET_KEY);
     const user_id = decoded.user_id;
-    const { search, year } = req.query;
+    const { search, year, limit = 10, offset = 0 } = req.query;
 
     let query = `
       SELECT 
@@ -250,33 +272,71 @@ const getMyProjects = async (req, res) => {
       WHERE upm.user_id = $1 AND p.deleted_at IS NULL
     `;
 
+    let countQuery = `
+      SELECT COUNT(*) 
+      FROM projects p
+      LEFT JOIN user_project_mapping upm ON p.project_id = upm.project_id
+      LEFT JOIN type_projects tp ON p.type_id = tp.type_id
+      WHERE upm.user_id = $1 AND p.deleted_at IS NULL
+    `;
+
     let values = [user_id];
+    let paramIndex = 2;
 
     if (search) {
       query += `
-        AND (p.project_name_th ILIKE $2 
-        OR p.project_name_en ILIKE $2 
+        AND (p.project_name_th ILIKE $${paramIndex} 
+        OR p.project_name_en ILIKE $${paramIndex} 
         OR EXISTS (
           SELECT 1 FROM jsonb_array_elements_text(p.keywords) AS keyword 
-          WHERE keyword ILIKE $2
+          WHERE keyword ILIKE $${paramIndex}
+        ))
+      `;
+      countQuery += `
+        AND (p.project_name_th ILIKE $${paramIndex} 
+        OR p.project_name_en ILIKE $${paramIndex} 
+        OR EXISTS (
+          SELECT 1 FROM jsonb_array_elements_text(p.keywords) AS keyword 
+          WHERE keyword ILIKE $${paramIndex}
         ))
       `;
       values.push(`%${search}%`);
+      paramIndex++;
     }
 
     if (year) {
-      const christianYear = parseInt(year, 10) - 543; // Convert Buddhist Year to Christian Year
+      const christianYear = parseInt(year, 10) - 543;
       query += `
-        AND EXTRACT(YEAR FROM p.date) = $${values.length + 1}
+        AND EXTRACT(YEAR FROM p.date) = $${paramIndex}
+      `;
+      countQuery += `
+        AND EXTRACT(YEAR FROM p.date) = $${paramIndex}
       `;
       values.push(christianYear);
+      paramIndex++;
     }
 
-    const result = await pool.query(query, values);
+    query += ` LIMIT $${paramIndex}`;
+    values.push(parseInt(limit, 10));
+    paramIndex++;
+
+    query += ` OFFSET $${paramIndex}`;
+    values.push(parseInt(offset, 10));
+
+    const dataPromise = pool.query(query, values);
+    const countPromise = pool.query(countQuery, values.slice(0, -2));
+
+    const [dataResult, countResult] = await Promise.all([
+      dataPromise,
+      countPromise,
+    ]);
+
+    const totalCount = countResult.rows[0].count;
 
     res.status(200).json({
       success: true,
-      data: result.rows,
+      data: dataResult.rows,
+      totalCount: totalCount,
     });
   } catch (err) {
     res.status(500).json({
