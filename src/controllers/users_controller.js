@@ -6,7 +6,7 @@ const jwt = require("jsonwebtoken");
 const SECRET_KEY = process.env.SECRET_KEY;
 
 const getAllUsers = async (req, res) => {
-  const { search, role_id } = req.query;
+  const { search, role_id, limit = 10, offset = 0 } = req.query;
 
   try {
     let query = `
@@ -52,18 +52,42 @@ const getAllUsers = async (req, res) => {
       query += ` WHERE users.deleted_at IS NULL`;
     }
 
+    // Add LIMIT and OFFSET for pagination
+    query += ` LIMIT $${queryParams.length + 1} OFFSET $${
+      queryParams.length + 2
+    }`;
+    queryParams.push(parseInt(limit), parseInt(offset));
+
+    // Execute the query to get the user data
     const result = await pool.query(query, queryParams);
+
+    // Query to get the total count of users (without LIMIT/OFFSET)
+    let countQuery = `
+      SELECT COUNT(*) 
+      FROM users 
+      LEFT JOIN roles ON users.role_id = roles.role_id
+    `;
+    if (conditions.length > 0) {
+      countQuery += ` WHERE ` + conditions.join(" AND ");
+    } else {
+      countQuery += ` WHERE users.deleted_at IS NULL`;
+    }
+
+    const countResult = await pool.query(countQuery, queryParams.slice(0, -2)); // Slice to remove LIMIT/OFFSET params for total count
+    const totalCount = parseInt(countResult.rows[0].count);
 
     if (result.rows.length === 0) {
       return res.status(404).json({
         success: false,
         data: [],
+        totalCount,
       });
     }
 
     res.status(200).json({
       success: true,
       data: result.rows,
+      totalCount, // Include total count for pagination
     });
   } catch (err) {
     res.status(500).json({
