@@ -180,13 +180,15 @@ const getProject = async (req, res) => {
 
   try {
     const result = await pool.query(
-      `SELECT p.*,u.user_id,u.first_name,u.last_name,u.email,up.role_group 
-      From projects p 
+      `SELECT p.*, tp.type_name, u.user_id, u.first_name, u.last_name, u.email, up.role_group 
+      FROM projects p
+      JOIN type_projects tp ON p.type_id = tp.type_id
       JOIN user_project_mapping up ON p.project_id = up.project_id
       JOIN users u ON up.user_id = u.user_id
       WHERE p.project_id = $1 AND p.deleted_at IS NULL`,
       [project_id],
     );
+
     if (result.rowCount === 0) {
       return res.status(404).json({
         error: "Project not found",
@@ -217,6 +219,7 @@ const getProject = async (req, res) => {
     const project = {
       project_id: projectData.project_id,
       type_id: projectData.type_id,
+      type_name: projectData.type_name,
       project_name_th: projectData.project_name_th,
       project_name_en: projectData.project_name_en,
       abstract_th: projectData.abstract_th,
