@@ -267,6 +267,7 @@ const getMyProjects = async (req, res) => {
     let query = `
       SELECT 
         p.*, 
+        upm.role_group, 
         CASE 
           WHEN tp.deleted_at IS NOT NULL THEN NULL
           ELSE p.type_id 
@@ -321,7 +322,7 @@ const getMyProjects = async (req, res) => {
       paramIndex++;
     }
 
-    query += " ORDER BY created_at DESC";
+    query += " ORDER BY p.created_at DESC";
 
     query += ` LIMIT $${paramIndex}`;
     values.push(parseInt(limit, 10));

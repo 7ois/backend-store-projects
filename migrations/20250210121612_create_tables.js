@@ -44,10 +44,10 @@ exports.up = function (knex) {
         .references("type_id")
         .inTable("type_projects")
         .onDelete("CASCADE");
-      table.string("project_name_th", 255);
-      table.string("project_name_en", 255);
-      table.string("abstract_th", 255);
-      table.string("abstract_en", 255);
+      table.text("project_name_th");
+      table.text("project_name_en");
+      table.text("abstract_th");
+      table.text("abstract_en");
       table.jsonb("keywords");
       table.date("date");
       table.string("file_name", 255);
