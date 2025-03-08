@@ -46,10 +46,7 @@ const getAllUsers = async (req, res) => {
     }
 
     if (conditions.length > 0) {
-      conditions.push(`users.deleted_at IS NULL`);
       query += ` WHERE ` + conditions.join(" AND ");
-    } else {
-      query += ` WHERE users.deleted_at IS NULL`;
     }
 
     // Add LIMIT and OFFSET for pagination
@@ -69,8 +66,6 @@ const getAllUsers = async (req, res) => {
     `;
     if (conditions.length > 0) {
       countQuery += ` WHERE ` + conditions.join(" AND ");
-    } else {
-      countQuery += ` WHERE users.deleted_at IS NULL`;
     }
 
     const countResult = await pool.query(countQuery, queryParams.slice(0, -2)); // Slice to remove LIMIT/OFFSET params for total count
@@ -150,6 +145,10 @@ const login = async (req, res) => {
     }
 
     const user = result.rows[0];
+
+    if (user.deleted_at !== null) {
+      return res.status(401).json({ error: "This account has been deleted" });
+    }
 
     // ตรวจสอบรหัสผ่าน
     const isPasswordValid = await bcrypt.compare(password, user.password);
@@ -274,4 +273,57 @@ const deleteUser = async (req, res) => {
   }
 };
 
-module.exports = { getAllUsers, register, login, updateUser, deleteUser };
+const rollbackUser = async (req, res) => {
+  const { user_id } = req.params;
+
+  try {
+    const userQuery = "SELECT * FROM users WHERE user_id = $1";
+    const userResult = await pool.query(userQuery, [user_id]);
+
+    if (userResult.rows.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "User not found",
+      });
+    }
+
+    const user = userResult.rows[0];
+
+    if (user.deleted_at === null) {
+      return res.status(400).json({
+        success: false,
+        message: "User is not deleted",
+      });
+    }
+
+    const rollbackQuery = `
+      UPDATE users 
+      SET deleted_at = NULL 
+      WHERE user_id = $1 
+      RETURNING *
+    `;
+    const rolledBackUser = await pool.query(rollbackQuery, [user_id]);
+
+    return res.status(200).json({
+      success: true,
+      message: "User rollbacked successfully",
+      user: rolledBackUser.rows[0],
+    });
+  } catch (err) {
+    console.error("Error rolling back user:", err);
+    return res.status(500).json({
+      success: false,
+      message: "Database error",
+      error: err.message,
+    });
+  }
+};
+
+module.exports = {
+  getAllUsers,
+  register,
+  login,
+  updateUser,
+  deleteUser,
+  rollbackUser,
+};
