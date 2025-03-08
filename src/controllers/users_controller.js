@@ -49,6 +49,8 @@ const getAllUsers = async (req, res) => {
       query += ` WHERE ` + conditions.join(" AND ");
     }
 
+    query += " ORDER BY created_at DESC";
+
     // Add LIMIT and OFFSET for pagination
     query += ` LIMIT $${queryParams.length + 1} OFFSET $${
       queryParams.length + 2
