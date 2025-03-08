@@ -143,6 +143,8 @@ const getAllProjects = async (req, res) => {
       countQuery += " AND " + conditions.join(" AND ");
     }
 
+    query += " ORDER BY created_at DESC";
+
     query += ` LIMIT $${paramIndex}`;
     values.push(parseInt(limit, 10));
     paramIndex++;
@@ -318,6 +320,8 @@ const getMyProjects = async (req, res) => {
       values.push(christianYear);
       paramIndex++;
     }
+
+    query += " ORDER BY created_at DESC";
 
     query += ` LIMIT $${paramIndex}`;
     values.push(parseInt(limit, 10));
