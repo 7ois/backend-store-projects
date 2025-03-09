@@ -186,16 +186,32 @@ const login = async (req, res) => {
 const updateUser = async (req, res) => {
   const { user_id } = req.params;
   const { first_name, last_name } = req.body;
+  const token = req.headers.authorization?.split(" ")[1];
 
   try {
+    if (!token) {
+      return res.status(401).json({ success: false, message: "Unauthorized" });
+    }
+
+    const decoded = jwt.decode(token);
+    if (!decoded || !decoded.exp) {
+      return res.status(401).json({ success: false, message: "Invalid token" });
+    }
+
+    const currentTime = Math.floor(Date.now() / 1000);
+    const remainingTime = decoded.exp - currentTime;
+
+    if (remainingTime <= 0) {
+      return res.status(401).json({ success: false, message: "Token expired" });
+    }
+
     const userQuery = "SELECT * FROM users WHERE user_id = $1";
     const userResult = await pool.query(userQuery, [user_id]);
 
     if (userResult.rows.length === 0) {
-      return res.status(404).json({
-        success: false,
-        message: "User not found",
-      });
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
     }
 
     if (first_name === undefined && last_name === undefined) {
@@ -227,11 +243,24 @@ const updateUser = async (req, res) => {
     queryParams.push(user_id);
 
     const updatedUser = await pool.query(updateQuery, queryParams);
+    const user = updatedUser.rows[0];
+
+    const newToken = jwt.sign(
+      {
+        user_id: user.user_id,
+        role_id: user.role_id,
+        email: user.email,
+        first_name: user.first_name,
+        last_name: user.last_name,
+      },
+      SECRET_KEY,
+      { expiresIn: remainingTime },
+    );
 
     return res.status(200).json({
       success: true,
       message: "User updated successfully",
-      user: updatedUser.rows[0],
+      token: newToken,
     });
   } catch (err) {
     console.error("Error updating user:", err);
